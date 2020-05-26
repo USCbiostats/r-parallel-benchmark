@@ -1,0 +1,73 @@
+---
+output: github_document
+---
+
+# Rcpp + OpenMP
+
+This repository shows how much speed gains can be obtained from using
+[OpenMP](https://openmp.org), and in particular, the `omp simd` and `parallel for`
+instructions.
+
+The test consists on computing the pair-wise distances between rows in a matrix
+of size `N` by `M`. The equivalent function in R is `dist()`, and here we 
+redefined it using [`Rcpp`](https://cran.r-project.org/package=Rcpp). The program is
+
+The file [norm.cpp](norm.cpp) contains the C++ source code for the dist functions.
+
+## Speed benchmark
+
+Whe using multicore, I'm only using 2 cores
+
+```{r execution, cache=TRUE}
+Rcpp::sourceCpp("norm.cpp")
+
+library(microbenchmark)
+set.seed(718243)
+N <- 200
+M <- 1000
+x <- matrix(runif(N * M), nrow = N)
+
+(ans_bm <- microbenchmark(
+  `SIMD + parfor` = dist_omp_simd(x, N, M, 2),
+  `parfor`        = dist_omp(x, N, M, 2),
+  `SIMD`          = dist_simd(x, N, M),
+  `serial`        = dist_for(x, N, M),
+  R               = dist(x),
+  times           = 200,
+  unit            = "relative"
+))
+```
+
+Overall, in my machine, the SIMD+parfor combo outperforms all the others. Let's
+see if the results are equivalent. At the very least, we should only observe
+small differences (if any) b/c of precision:
+
+```{r Comparing-results, cache=TRUE}
+Rcpp::sourceCpp("norm.cpp")
+ans0 <- as.matrix(dist(x))
+ans1a <- dist_omp_simd(x, N, M)
+ans1b <- dist_omp(x, N, M)
+ans1c <- dist_simd(x, N, M)
+ans1d <- dist_for(x, N, M)
+range(ans0 - ans1b)
+range(ans1a - ans1b)
+range(ans1b - ans1c)
+range(ans1c - ans1d)
+```
+
+
+Finally, the [`microbenchmark`](https://cran.r-project.org/package=microbenchmark)
+R package offers a nice viz with boxplot comparing all the methods:
+
+```{r viz, dependson='execution'}
+op <- par(mai = par("mai") * c(2,1,1,1))
+boxplot(ans_bm, las = 2, xlab = "")
+par(op)
+```
+
+## Session info
+
+```{r}
+sessionInfo()
+```
+
