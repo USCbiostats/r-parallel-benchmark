@@ -13,17 +13,31 @@ of size `N` by `M`. The equivalent function in R is `dist()`, and here we
 redefined it using [`Rcpp`](https://cran.r-project.org/package=Rcpp). The program is
 
 The file [norm.cpp](norm.cpp) contains the C++ source code for the dist functions.
+The compiles function are:
+
+- `dist_omp_simd` Using the pragma directives `parallel for` and `simd`.
+
+- `dist_omp` Using the pragma `parallel for`.
+
+- `dist_simd` Using the pragma `simd`.
+
+- `dist_for` no directives.
+
+- `dist_for_arma2` Using Armadillo with vectorized functions.
+
+- `dist_for_arma1` Armadillo implementation with for-loops.
 
 ## Speed benchmark
 
 Whe using multicore, I'm only using 2 cores
 
 ```{r execution, cache=TRUE}
+Sys.setenv("PKG_CXXFLAGS"=paste("-fopenmp -O2 -mavx2 -march=core-avx2 -mtune=core-avx2"))
 Rcpp::sourceCpp("norm.cpp")
 
 library(microbenchmark)
 set.seed(718243)
-N <- 200
+N <- 500
 M <- 1000
 x <- matrix(runif(N * M), nrow = N)
 
@@ -32,10 +46,19 @@ x <- matrix(runif(N * M), nrow = N)
   `parfor`        = dist_omp(x, N, M, 2),
   `SIMD`          = dist_simd(x, N, M),
   `serial`        = dist_for(x, N, M),
-  R               = dist(x),
-  times           = 200,
+  `arma sugar`    = dist_for_arma2(x,N,M),
+  `arma`          = dist_for_arma1(x,N,M),
+  R               = as.matrix(dist(x)),
+  times           = 10,
   unit            = "relative"
 ))
+```
+
+As a reference, the elapsed time in ms for R and SIMD + parfor is
+
+```{r print-as-ms, echo=FALSE}
+library(microbenchmark)
+print(ans_bm[ans_bm$expr %in% c("R", "SIMD + parfor"),], unit = "ms")
 ```
 
 Overall, in my machine, the SIMD+parfor combo outperforms all the others. Let's
@@ -55,6 +78,8 @@ range(ans1b - ans1c)
 range(ans1c - ans1d)
 ```
 
+The programs were compiled on a machine with an 
+[Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz processor](https://ark.intel.com/content/www/us/en/ark/products/95443/intel-core-i5-7200u-processor-3m-cache-up-to-3-10-ghz.html) which works with [AVX2 instructions](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX2), i.e. we can literally vectorize 4 operations at a time (on top of multi-threading). One important thing to consider is that for this to work we had to generate a copy of the R matrix into a double vector so that elements were contiguous (which is important for SIMD).
 
 Finally, the [`microbenchmark`](https://cran.r-project.org/package=microbenchmark)
 R package offers a nice viz with boxplot comparing all the methods:
