@@ -8,7 +8,8 @@ This repository shows how much speed gains can be obtained from using
 The test consists on computing the pair-wise distances between rows in a
 matrix of size `N` by `M`. The equivalent function in R is `dist()`, and
 here we redefined it using
-[`Rcpp`](https://cran.r-project.org/package=Rcpp). The program is
+[`Rcpp`](https://cran.r-project.org/package=Rcpp) (checkout the
+benchmark computing matrix product [here](matrix.md)).
 
 The file [norm.cpp](norm.cpp) contains the C++ source code for the dist
 functions. The compiles function are:
@@ -34,11 +35,7 @@ functions. The compiles function are:
 
 ``` r
 # Notice that the -fopenmp flag is already included in the norm.cpp file
-Sys.setenv(
-  "PKG_CXXFLAGS" =
-    "-O2 -mavx2 -march=core-avx2 -mtune=core-avx2 -DARMA_USE_OPENMP"
-  )
-
+Sys.setenv("PKG_CXXFLAGS" = "-O2 -mavx2 -march=core-avx2 -mtune=core-avx2 -DARMA_USE_OPENMP")
 Rcpp::sourceCpp("norm.cpp")
 
 library(microbenchmark)
@@ -65,36 +62,35 @@ xt <- t(x)
     ## Unit: relative
     ##                 expr       min        lq      mean    median        uq
     ##        SIMD + parfor  1.000000  1.000000  1.000000  1.000000  1.000000
-    ##  SIMD + parfor (ptr)  1.782973  1.552520  1.601552  1.513108  1.535381
-    ##               parfor  4.981273  4.262165  3.984993  3.962705  3.708952
-    ##                 SIMD  2.290003  2.055006  1.960216  1.944062  1.880673
-    ##               serial  6.808312  5.813034  5.478455  5.420457  5.075050
-    ##           arma sugar 10.000370  8.541655  8.042582  8.014617  7.568566
-    ##                 arma 19.594468 16.663957 15.695792 15.605241 14.825861
-    ##                    R 16.478858 14.014820 13.659033 13.033122 13.618642
+    ##  SIMD + parfor (ptr)  1.988231  1.907905  1.643196  1.691858  1.570433
+    ##               parfor  5.760479  5.406466  4.534786  4.771680  4.383089
+    ##                 SIMD  2.536072  2.604019  2.208521  2.324007  2.217244
+    ##               serial  7.952869  7.462539  6.223826  6.547414  5.987260
+    ##           arma sugar 11.568625 11.026254  9.320743  9.757749  9.029780
+    ##                 arma 22.568619 21.226163 17.889401 18.759475 17.445523
+    ##                    R 19.122648 17.966336 15.010903 15.781185 14.479466
     ##        max neval
     ##   1.000000    10
-    ##   1.939926    10
-    ##   3.460637    10
-    ##   1.769079    10
-    ##   4.922147    10
-    ##   6.819088    10
-    ##  13.413160    10
-    ##  12.840495    10
+    ##   1.125353    10
+    ##   2.791964    10
+    ##   1.448714    10
+    ##   3.810559    10
+    ##   6.013839    10
+    ##  11.089759    10
+    ##   9.257423    10
 
 As a reference, the elapsed time in ms for R and SIMD + parfor is
 
     ## Unit: milliseconds
-    ##           expr       min        lq      mean    median        uq       max
-    ##  SIMD + parfor  25.53399  30.13904  32.48245  32.53673  34.96224  39.12013
-    ##              R 420.77105 422.39319 443.67891 424.05514 476.13818 502.32185
-    ##  neval
-    ##     10
-    ##     10
+    ##           expr       min        lq      mean    median       uq       max neval
+    ##  SIMD + parfor  21.67744  23.12601  27.89102  26.51103  29.0675  46.03553    10
+    ##              R 414.53010 415.48960 418.66938 418.37554 420.8819 426.17034    10
 
-Overall, in my machine, the SIMD+parfor combo outperforms all the
-others. Let’s see if the results are equivalent. At the very least, we
-should only observe small differences (if any) b/c of precision:
+Overall, in my machine, the SIMD+parfor combo outperforms all the others
+(notice that when it comes to compute matrix products, [Armadillo is the
+fastest](matrix.md)). Let’s see if the results are equivalent. At the
+very least, we should only observe small differences (if any) b/c of
+precision:
 
 ``` r
 Rcpp::sourceCpp("norm.cpp")
@@ -160,6 +156,10 @@ par(op)
 ```
 
 ## Session info
+
+The programs were compiled on a machine with an [Intel(R) Core(TM)
+i5-7200U CPU @ 2.50GHz
+processor](https://ark.intel.com/content/www/us/en/ark/products/95443/intel-core-i5-7200u-processor-3m-cache-up-to-3-10-ghz.html)
 
 ``` r
 sessionInfo()

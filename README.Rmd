@@ -10,7 +10,8 @@ instructions.
 
 The test consists on computing the pair-wise distances between rows in a matrix
 of size `N` by `M`. The equivalent function in R is `dist()`, and here we 
-redefined it using [`Rcpp`](https://cran.r-project.org/package=Rcpp). The program is
+redefined it using [`Rcpp`](https://cran.r-project.org/package=Rcpp) (checkout
+the benchmark computing matrix product [here](matrix.md)).
 
 The file [norm.cpp](norm.cpp) contains the C++ source code for the dist functions.
 The compiles function are:
@@ -33,11 +34,7 @@ The compiles function are:
 
 ```{r execution, cache=TRUE}
 # Notice that the -fopenmp flag is already included in the norm.cpp file
-Sys.setenv(
-  "PKG_CXXFLAGS" =
-    "-O2 -mavx2 -march=core-avx2 -mtune=core-avx2 -DARMA_USE_OPENMP"
-  )
-
+Sys.setenv("PKG_CXXFLAGS" = "-O2 -mavx2 -march=core-avx2 -mtune=core-avx2 -DARMA_USE_OPENMP")
 Rcpp::sourceCpp("norm.cpp")
 
 library(microbenchmark)
@@ -68,9 +65,10 @@ library(microbenchmark)
 print(ans_bm[ans_bm$expr %in% c("R", "SIMD + parfor"),], unit = "ms")
 ```
 
-Overall, in my machine, the SIMD+parfor combo outperforms all the others. Let's
-see if the results are equivalent. At the very least, we should only observe
-small differences (if any) b/c of precision:
+Overall, in my machine, the SIMD+parfor combo outperforms all the others (notice
+that when it comes to compute matrix products, [Armadillo is the fastest](matrix.md)).
+Let's see if the results are equivalent. At the very least, we should only
+observe small differences (if any) b/c of precision:
 
 ```{r Comparing-results, cache=TRUE}
 Rcpp::sourceCpp("norm.cpp")
@@ -99,6 +97,9 @@ par(op)
 ```
 
 ## Session info
+
+The programs were compiled on a machine with an 
+[Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz processor](https://ark.intel.com/content/www/us/en/ark/products/95443/intel-core-i5-7200u-processor-3m-cache-up-to-3-10-ghz.html)
 
 ```{r}
 sessionInfo()

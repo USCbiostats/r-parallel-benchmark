@@ -1,0 +1,60 @@
+---
+title: "Matrix Multiplication"
+output: github_document
+---
+
+In this benchmark I am measuring how fast can matrix multiplication be with OpenMP.
+In particular, the file [matrix.cpp](matrix.cpp) has a template class representing
+a matrix in which the data is stored in a `std::vector` contiguously (column-major).
+
+As in the example of [norm.cpp](README.md), here we compare with/without SIMD and
+multithreading. I also included a comparison against [Armadillo](http://arma.sourceforge.net/)
+which turned out to be most efficient that my own implementations (what was I thinking :P).
+
+```{r comp-and-run, cache=TRUE}
+# Notice that the -fopenmp flag is already included in the norm.cpp file
+# Sys.setenv("PKG_CXXFLAGS" = "-O2 -mavx2 -march=core-avx2 -mtune=core-avx2 -DARMA_USE_OPENMP")
+Rcpp::sourceCpp("matrix.cpp")
+
+# Base R implementation
+multR <- function(n0, m0, n1, m1) {
+  a <- matrix(0.0, nrow = n0, ncol = m0)
+  b <- matrix(0.0, nrow = m1, ncol = n1)
+  crossprod(a,b)
+}
+
+# Comparing with R
+dims <- c(100, 4000, 100)
+(microbenchmark::microbenchmark(
+  R        = multR(dims[1],dims[2],dims[2],dims[3]),
+  simd_omp = mult(dims[1],dims[2],dims[2],dims[3], TRUE, 2),
+  unit = "ms", times = 10
+))
+
+# Pure C++ implementations
+dims <- c(100, 10000, 100)
+(ans <- microbenchmark::microbenchmark(
+  serial   = mult(dims[1],dims[2],dims[2],dims[3], FALSE),
+  simd     = mult(dims[1],dims[2],dims[2],dims[3], TRUE, 1),
+  simd_omp = mult(dims[1],dims[2],dims[2],dims[3], TRUE, 2),
+  Arma     = multArma(dims[1],dims[2],dims[2],dims[3]),
+  unit     = "relative",
+  times    = 10
+))
+
+
+```
+
+```{r}
+plot(ans)
+```
+
+## Session info
+
+The programs were compiled on a machine with an 
+[Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz processor](https://ark.intel.com/content/www/us/en/ark/products/95443/intel-core-i5-7200u-processor-3m-cache-up-to-3-10-ghz.html)
+
+```{r}
+sessionInfo()
+```
+
