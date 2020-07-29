@@ -17,6 +17,8 @@ The compiles function are:
 
 - `dist_omp_simd` Using the pragma directives `parallel for` and `simd`.
 
+- `dist_omp_simd_ptr` Same as above, but instead of creating a copy of the input matrix, it uses a `const double *` (a pointer) to access the data.
+
 - `dist_omp` Using the pragma `parallel for`.
 
 - `dist_simd` Using the pragma `simd`.
@@ -29,10 +31,13 @@ The compiles function are:
 
 ## Speed benchmark
 
-Whe using multicore, I'm only using 2 cores
-
 ```{r execution, cache=TRUE}
-Sys.setenv("PKG_CXXFLAGS"=paste("-fopenmp -O2 -mavx2 -march=core-avx2 -mtune=core-avx2"))
+# Notice that the -fopenmp flag is already included in the norm.cpp file
+Sys.setenv(
+  "PKG_CXXFLAGS" =
+    "-O2 -mavx2 -march=core-avx2 -mtune=core-avx2 -DARMA_USE_OPENMP"
+  )
+
 Rcpp::sourceCpp("norm.cpp")
 
 library(microbenchmark)
@@ -40,17 +45,19 @@ set.seed(718243)
 N <- 500
 M <- 1000
 x <- matrix(runif(N * M), nrow = N)
+xt <- t(x)
 
 (ans_bm <- microbenchmark(
-  `SIMD + parfor` = dist_omp_simd(x, N, M, 2),
-  `parfor`        = dist_omp(x, N, M, 2),
-  `SIMD`          = dist_simd(x, N, M),
-  `serial`        = dist_for(x, N, M),
-  `arma sugar`    = dist_for_arma2(x,N,M),
-  `arma`          = dist_for_arma1(x,N,M),
-  R               = as.matrix(dist(x)),
-  times           = 10,
-  unit            = "relative"
+  `SIMD + parfor`      = dist_omp_simd(x, N, M, 2),
+  `SIMD + parfor (ptr)`= dist_omp_simd_ptr(xt, N, M, 2),
+  `parfor`             = dist_omp(x, N, M, 2),
+  `SIMD`               = dist_simd(x, N, M),
+  `serial`             = dist_for(x, N, M),
+  `arma sugar`         = dist_for_arma2(x,N,M),
+  `arma`               = dist_for_arma1(x,N,M),
+  R                    = as.matrix(dist(x)),
+  times                = 10,
+  unit                 = "relative"
 ))
 ```
 
@@ -68,21 +75,22 @@ small differences (if any) b/c of precision:
 ```{r Comparing-results, cache=TRUE}
 Rcpp::sourceCpp("norm.cpp")
 ans0 <- as.matrix(dist(x))
-ans1a <- dist_omp_simd(x, N, M)
-ans1b <- dist_omp(x, N, M)
-ans1c <- dist_simd(x, N, M)
-ans1d <- dist_for(x, N, M)
-range(ans0 - ans1b)
-range(ans1a - ans1b)
-range(ans1b - ans1c)
-range(ans1c - ans1d)
+ans_a <- dist_omp_simd(x, N, M)
+ans_b <- dist_omp(x, N, M)
+ans_c <- dist_simd(x, N, M)
+ans_d <- dist_for(x, N, M)
+ans_e <- dist_omp_simd_ptr(t(x), N, M)
+range(ans0 - ans_b)
+range(ans_a - ans_b)
+range(ans_b - ans_c)
+range(ans_c - ans_d)
+range(ans_d - ans_e)
 ```
 
 The programs were compiled on a machine with an 
-[Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz processor](https://ark.intel.com/content/www/us/en/ark/products/95443/intel-core-i5-7200u-processor-3m-cache-up-to-3-10-ghz.html) which works with [AVX2 instructions](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX2), i.e. we can literally vectorize 4 operations at a time (on top of multi-threading). One important thing to consider is that for this to work we had to generate a copy of the R matrix into a double vector so that elements were contiguous (which is important for SIMD).
+[Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz processor](https://ark.intel.com/content/www/us/en/ark/products/95443/intel-core-i5-7200u-processor-3m-cache-up-to-3-10-ghz.html) which works with [AVX2 instructions](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX2), i.e. we can literally vectorize 4 double precision operations at a time (512/64 = 4, on top of multi-threading). One important thing to consider is that for this to work we had to generate a copy of the R matrix into a double vector so that elements were contiguous (which is important for SIMD).
 
-Finally, the [`microbenchmark`](https://cran.r-project.org/package=microbenchmark)
-R package offers a nice viz with boxplot comparing all the methods:
+Finally, the [`microbenchmark`](https://cran.r-project.org/package=microbenchmark) R package offers a nice viz with boxplot comparing all the methods:
 
 ```{r viz, dependson='execution'}
 op <- par(mai = par("mai") * c(2,1,1,1))

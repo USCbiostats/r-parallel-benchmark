@@ -16,6 +16,10 @@ functions. The compiles function are:
   - `dist_omp_simd` Using the pragma directives `parallel for` and
     `simd`.
 
+  - `dist_omp_simd_ptr` Same as above, but instead of creating a copy of
+    the input matrix, it uses a `const double *` (a pointer) to access
+    the data.
+
   - `dist_omp` Using the pragma `parallel for`.
 
   - `dist_simd` Using the pragma `simd`.
@@ -28,10 +32,13 @@ functions. The compiles function are:
 
 ## Speed benchmark
 
-Whe using multicore, I’m only using 2 cores
-
 ``` r
-Sys.setenv("PKG_CXXFLAGS"=paste("-fopenmp -O2 -mavx2 -march=core-avx2 -mtune=core-avx2"))
+# Notice that the -fopenmp flag is already included in the norm.cpp file
+Sys.setenv(
+  "PKG_CXXFLAGS" =
+    "-O2 -mavx2 -march=core-avx2 -mtune=core-avx2 -DARMA_USE_OPENMP"
+  )
+
 Rcpp::sourceCpp("norm.cpp")
 
 library(microbenchmark)
@@ -39,44 +46,48 @@ set.seed(718243)
 N <- 500
 M <- 1000
 x <- matrix(runif(N * M), nrow = N)
+xt <- t(x)
 
 (ans_bm <- microbenchmark(
-  `SIMD + parfor` = dist_omp_simd(x, N, M, 2),
-  `parfor`        = dist_omp(x, N, M, 2),
-  `SIMD`          = dist_simd(x, N, M),
-  `serial`        = dist_for(x, N, M),
-  `arma sugar`    = dist_for_arma2(x,N,M),
-  `arma`          = dist_for_arma1(x,N,M),
-  R               = as.matrix(dist(x)),
-  times           = 10,
-  unit            = "relative"
+  `SIMD + parfor`      = dist_omp_simd(x, N, M, 2),
+  `SIMD + parfor (ptr)`= dist_omp_simd_ptr(xt, N, M, 2),
+  `parfor`             = dist_omp(x, N, M, 2),
+  `SIMD`               = dist_simd(x, N, M),
+  `serial`             = dist_for(x, N, M),
+  `arma sugar`         = dist_for_arma2(x,N,M),
+  `arma`               = dist_for_arma1(x,N,M),
+  R                    = as.matrix(dist(x)),
+  times                = 10,
+  unit                 = "relative"
 ))
 ```
 
     ## Unit: relative
-    ##           expr       min        lq      mean    median        uq       max
-    ##  SIMD + parfor  1.000000  1.000000  1.000000  1.000000  1.000000  1.000000
-    ##         parfor  4.525767  4.228444  3.956531  3.741240  3.754374  3.870529
-    ##           SIMD  1.998500  1.986318  1.924191  1.752240  1.722760  2.122128
-    ##         serial  6.187921  5.770530  5.179253  4.993561  4.923769  4.139801
-    ##     arma sugar  8.582125  8.084118  7.641437  7.085500  6.739811  7.963009
-    ##           arma 17.258725 16.340381 15.588027 15.380473 15.175025 13.925154
-    ##              R 14.175100 13.198820 12.506306 11.462402 11.972508 12.457738
-    ##  neval
-    ##     10
-    ##     10
-    ##     10
-    ##     10
-    ##     10
-    ##     10
-    ##     10
+    ##                 expr       min        lq      mean    median        uq
+    ##        SIMD + parfor  1.000000  1.000000  1.000000  1.000000  1.000000
+    ##  SIMD + parfor (ptr)  1.782973  1.552520  1.601552  1.513108  1.535381
+    ##               parfor  4.981273  4.262165  3.984993  3.962705  3.708952
+    ##                 SIMD  2.290003  2.055006  1.960216  1.944062  1.880673
+    ##               serial  6.808312  5.813034  5.478455  5.420457  5.075050
+    ##           arma sugar 10.000370  8.541655  8.042582  8.014617  7.568566
+    ##                 arma 19.594468 16.663957 15.695792 15.605241 14.825861
+    ##                    R 16.478858 14.014820 13.659033 13.033122 13.618642
+    ##        max neval
+    ##   1.000000    10
+    ##   1.939926    10
+    ##   3.460637    10
+    ##   1.769079    10
+    ##   4.922147    10
+    ##   6.819088    10
+    ##  13.413160    10
+    ##  12.840495    10
 
 As a reference, the elapsed time in ms for R and SIMD + parfor is
 
     ## Unit: milliseconds
     ##           expr       min        lq      mean    median        uq       max
-    ##  SIMD + parfor  28.62259  31.20543  35.82479  36.48984  38.97481  47.33635
-    ##              R 405.72800 411.87482 448.03582 418.26125 466.62621 589.70381
+    ##  SIMD + parfor  25.53399  30.13904  32.48245  32.53673  34.96224  39.12013
+    ##              R 420.77105 422.39319 443.67891 424.05514 476.13818 502.32185
     ##  neval
     ##     10
     ##     10
@@ -88,42 +99,50 @@ should only observe small differences (if any) b/c of precision:
 ``` r
 Rcpp::sourceCpp("norm.cpp")
 ans0 <- as.matrix(dist(x))
-ans1a <- dist_omp_simd(x, N, M)
-ans1b <- dist_omp(x, N, M)
-ans1c <- dist_simd(x, N, M)
-ans1d <- dist_for(x, N, M)
-range(ans0 - ans1b)
+ans_a <- dist_omp_simd(x, N, M)
+ans_b <- dist_omp(x, N, M)
+ans_c <- dist_simd(x, N, M)
+ans_d <- dist_for(x, N, M)
+ans_e <- dist_omp_simd_ptr(t(x), N, M)
+range(ans0 - ans_b)
 ```
 
     ## [1] -1.071123e-07  9.346249e-08
 
 ``` r
-range(ans1a - ans1b)
+range(ans_a - ans_b)
 ```
 
     ## [1] 0.000000e+00 5.151435e-14
 
 ``` r
-range(ans1b - ans1c)
+range(ans_b - ans_c)
 ```
 
     ## [1] -9.346248e-08  1.071123e-07
 
 ``` r
-range(ans1c - ans1d)
+range(ans_c - ans_d)
 ```
 
     ## [1] -2.842171e-14  3.197442e-14
+
+``` r
+range(ans_d - ans_e)
+```
+
+    ## [1] -3.197442e-14  2.842171e-14
 
 The programs were compiled on a machine with an [Intel(R) Core(TM)
 i5-7200U CPU @ 2.50GHz
 processor](https://ark.intel.com/content/www/us/en/ark/products/95443/intel-core-i5-7200u-processor-3m-cache-up-to-3-10-ghz.html)
 which works with [AVX2
 instructions](https://en.wikipedia.org/wiki/Advanced_Vector_Extensions#CPUs_with_AVX2),
-i.e. we can literally vectorize 4 operations at a time (on top of
-multi-threading). One important thing to consider is that for this to
-work we had to generate a copy of the R matrix into a double vector so
-that elements were contiguous (which is important for SIMD).
+i.e. we can literally vectorize 4 double precision operations at a time
+(512/64 = 4, on top of multi-threading). One important thing to consider
+is that for this to work we had to generate a copy of the R matrix into
+a double vector so that elements were contiguous (which is important for
+SIMD).
 
 Finally, the
 [`microbenchmark`](https://cran.r-project.org/package=microbenchmark) R
@@ -169,11 +188,7 @@ sessionInfo()
     ## [1] microbenchmark_1.4-7
     ## 
     ## loaded via a namespace (and not attached):
-    ##  [1] compiler_4.0.2            magrittr_1.5             
-    ##  [3] tools_4.0.2               htmltools_0.5.0          
-    ##  [5] RcppArmadillo_0.9.900.1.0 yaml_2.2.1               
-    ##  [7] Rcpp_1.0.5                codetools_0.2-16         
-    ##  [9] stringi_1.4.6             rmarkdown_2.3            
-    ## [11] knitr_1.29                stringr_1.4.0            
-    ## [13] xfun_0.15                 digest_0.6.25            
-    ## [15] rlang_0.4.6               evaluate_0.14
+    ##  [1] compiler_4.0.2  magrittr_1.5    tools_4.0.2     htmltools_0.5.0
+    ##  [5] yaml_2.2.1      stringi_1.4.6   rmarkdown_2.3   knitr_1.29     
+    ##  [9] stringr_1.4.0   xfun_0.15       digest_0.6.25   rlang_0.4.6    
+    ## [13] evaluate_0.14

@@ -121,6 +121,30 @@ NumericMatrix dist_omp_simd(const NumericMatrix & x, int N, int M, int ncores = 
 }
 
 // [[Rcpp::export]]
+NumericMatrix dist_omp_simd_ptr(const NumericMatrix & x, int N, int M, int ncores = 4) {
+  
+  omp_set_num_threads(ncores);
+  
+  const double * x_ = (const double *) &x[0];
+  
+  NumericMatrix ans(N,N);
+#pragma omp parallel for shared(x_,N,M) collapse(1)
+  for (int i = 0; i < N; ++i) {
+    for (int j = 0; j < i; ++j) {
+      double tmp = 0.0;
+#pragma omp simd reduction(+:tmp) simdlen(4) 
+      for (int k = 0; k < M; ++k)
+        tmp += pow(x_[i*M + k] - x_[j*M + k], 2.0);
+      ans(i,j) = sqrt(tmp);
+      ans(j,i) = ans(i,j);
+    }
+  }
+  
+  return ans;
+  
+}
+
+// [[Rcpp::export]]
 NumericMatrix dist_omp(const NumericMatrix & x, int N, int M, int ncores = 4) {
   
   omp_set_num_threads(ncores);
